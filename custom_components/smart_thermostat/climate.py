@@ -20,7 +20,7 @@ from homeassistant.helpers.event import (
     async_track_state_change, async_track_time_interval)
 from homeassistant.helpers.restore_state import RestoreEntity
 
-from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateDevice
+from homeassistant.components.climate import PLATFORM_SCHEMA, ClimateEntity
 from homeassistant.components.climate.const import (
     ATTR_PRESET_MODE, CURRENT_HVAC_COOL, CURRENT_HVAC_HEAT, CURRENT_HVAC_IDLE,
     CURRENT_HVAC_OFF, HVAC_MODE_COOL, HVAC_MODE_HEAT, HVAC_MODE_OFF,
@@ -125,7 +125,7 @@ async def async_setup_platform(hass, config, async_add_entities,
         precision, unit, difference, kp, ki, kd, pwm, autotune, noiseband)])
 
 
-class SmartThermostat(ClimateDevice, RestoreEntity):
+class SmartThermostat(ClimateEntity, RestoreEntity):
     """Representation of a Smart Thermostat device."""
 
     def __init__(self, name, heater_entity_id, sensor_entity_id,
