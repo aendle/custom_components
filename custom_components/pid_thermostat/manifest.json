@@ -1,0 +1,13 @@
+{
+  "domain": "pid_thermostat",
+  "name": "PID thermostat",
+  "documentation": "https://github.com/aendle/custom_components",
+  "issue_tracker": "https://github.com/aendle/custom_components/issues",
+  "requirements": [],
+  "codeowners": ["@aendle"],
+  "dependencies": [
+    "sensor",
+    "switch"
+  ],
+  "codeowners": []
+}

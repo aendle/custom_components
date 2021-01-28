@@ -1,0 +1,41 @@
+# Describes the format for available PIDThermostat services
+
+set_kp:
+  description: Set a new Kp value
+  fields:
+    entity_id:
+      description: Thermostat entity_id.
+      example: climate.study
+    kp:
+      description: kp value of PID controller
+      example: 2
+
+set_ki:
+  description: Set a new Ki value
+  fields:
+    entity_id:
+      description: Thermostat entity_id.
+      example: climate.study
+    ki:
+      description: Ki value of PID controller
+      example: 3
+
+set_kd:
+  description: Set a new Kd value
+  fields:
+    entity_id:
+      description: Thermostat entity_id.
+      example: climate.study
+    kd:
+      description: Kd value of PID controller
+      example: 2
+
+set_pwm:
+  description: Set a new PWM value
+  fields:
+    entity_id:
+      description: Thermostat entity_id.
+      example: climate.study
+    pwm:
+      description: PWM value to modulate output
+      example: 2
