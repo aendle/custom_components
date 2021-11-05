@@ -6,89 +6,132 @@ from collections import deque, namedtuple
 
 # Based on Arduino PID Library
 # See https://github.com/br3ttb/Arduino-PID-Library
-class PIDArduino(object):
-    """A proportional-integral-derivative controller.
+class PID(object):
+    error: float
 
-    Args:
-        sampletime (float): The interval between calc() calls.
-        kp (float): Proportional coefficient.
-        ki (float): Integral coefficient.
-        kd (float): Derivative coefficient.
-        out_min (float): Lower output limit.
-        out_max (float): Upper output limit.
-        time (function): A function which returns the current time in seconds.
-    """
-
-    def __init__(self, sampletime, kp, ki, kd, out_min=float('-inf'),
-                 out_max=float('inf'), time=time):
+    def __init__(self, kp, ki, kd, out_min=float('-inf'), out_max=float('+inf'), sampling_period=0):
+        """A proportional-integral-derivative controller.
+            :param kp: Proportional coefficient.
+            :type kp: float
+            :param ki: Integral coefficient.
+            :type ki: float
+            :param kd: Derivative coefficient.
+            :type kd: float
+            :param out_min: Lower output limit.
+            :type out_min: float
+            :param out_max: Upper output limit.
+            :type out_max: float
+            :param sampling_period: time period between two PID calculations in seconds
+            :type sampling_period: float
+        """
         if kp is None:
             raise ValueError('kp must be specified')
         if ki is None:
             raise ValueError('ki must be specified')
         if kd is None:
             raise ValueError('kd must be specified')
-        if sampletime <= 0:
-            raise ValueError('sampletime must be greater than 0')
         if out_min >= out_max:
             raise ValueError('out_min must be less than out_max')
 
         self._logger = logging.getLogger(type(self).__name__)
         self._Kp = kp
-        self._Ki = ki * sampletime
-        self._Kd = kd / sampletime
-        self._sampletime = sampletime * 1000
+        self._Ki = ki
+        self._Kd = kd
         self._out_min = out_min
         self._out_max = out_max
-        self._integral = 0
-        self._last_input = 0
+        self._integral = 0.0
+        self._set_point = 0
+        self._input = None
+        self._input_time = None
+        self._last_input = None
+        self._last_input_time = None
+        self.error = 0
+        self._input_diff = 0
+        self.dt = 0
         self._last_output = 0
-        self._last_calc_timestamp = 0
-        self._time = time
+        self.output = 0
+        self.P = 0
+        self.I = 0
+        self.D = 0
+        self._mode = 'AUTO'
+        self.sampling_period = sampling_period
 
-    def calc(self, input_val, setpoint):
+    @property
+    def mode(self):
+        return self._mode
+
+    @mode.setter
+    def mode(self, mode):
+        assert mode.upper() in ['AUTO', 'OFF']
+        self._mode = mode.upper()
+
+    def calc(self, input_val, set_point, input_time=None, last_input_time=None):
         """Adjusts and holds the given setpoint.
 
         Args:
             input_val (float): The input value.
-            setpoint (float): The target value.
+            set_point (float): The target value.
+            input_time (float): The timestamp in seconds of the input value to compute dt
+            last_input_time (float): The timestamp in seconds of the previous input value to compute dt
 
         Returns:
             A value between `out_min` and `out_max`.
         """
-        now = self._time() * 1000
+        if self.mode == 'OFF':  # If PID is off, don't update and return the last value
+            return self.output
+        if self.sampling_period != 0 and self._last_input_time is not None and \
+                time() - self._last_input_time < self.sampling_period:
+            return self.output  # If last sample is too young, keep last output value
 
-        if (now - self._last_calc_timestamp) < self._sampletime:
-            return self._last_output
+        self._last_input = self._input
+        if self.sampling_period == 0:
+            self._last_input_time = last_input_time
+        else:
+            self._last_input_time = self._input_time
+        self._last_output = self.output
+
+        # Refresh with actual values
+        self._input = input_val
+        if self.sampling_period == 0:
+            self._input_time = input_time
+        else:
+            self._input_time = time()
+        self._set_point = set_point
 
         # Compute all the working error variables
-        error = setpoint - input_val
-        input_diff = input_val - self._last_input
+        self.error = set_point - input_val
+        if self._last_input is not None:
+            self._input_diff = self._input - self._last_input
+        else:
+            self._input_diff = 0
+        if self._last_input_time is not None:
+            self.dt = self._input_time - self._last_input_time
+        else:
+            self.dt = 0
 
         # In order to prevent windup, only integrate if the process is not saturated
-        if self._last_output < self._out_max and self._last_output > self._out_min:
-            self._integral += self._Ki * error
-            self._integral = min(self._integral, self._out_max)
-            self._integral = max(self._integral, self._out_min)
+        if self._out_min < self._last_output < self._out_max:
+            self._integral += self._Ki * self.error * self.dt
+            self._integral = max(min(self._integral, self._out_max), self._out_min)
 
-        p = self._Kp * error
-        i = self._integral
-        d = -(self._Kd * input_diff)
+        self.P = self._Kp * self.error
+        self.I = self._integral
+        if self.dt != 0:
+            self.D = -(self._Kd * self._input_diff) / self.dt
+        else:
+            self.D = 0.0
 
         # Compute PID Output
-        self._last_output = p + i + d
-        self._last_output = min(self._last_output, self._out_max)
-        self._last_output = max(self._last_output, self._out_min)
+        output = self.P + self.I + self.D
+        self.output = max(min(output, self._out_max), self._out_min)
 
         # Log some debug info
-        self._logger.debug('P: {0}'.format(p))
-        self._logger.debug('I: {0}'.format(i))
-        self._logger.debug('D: {0}'.format(d))
-        self._logger.debug('output: {0}'.format(self._last_output))
+        self._logger.debug('P: {0}'.format(self.P))
+        self._logger.debug('I: {0}'.format(self.I))
+        self._logger.debug('D: {0}'.format(self.D))
+        self._logger.debug('output: {0}'.format(self.output))
 
-        # Remember some variables for next time
-        self._last_input = input_val
-        self._last_calc_timestamp = now
-        return self._last_output
+        return self.output
 
 # Based on a fork of Arduino PID AutoTune Library
 # See https://github.com/t0mpr1c3/Arduino-PID-AutoTune-Library
@@ -143,7 +186,7 @@ class PIDAutotune(object):
         self._time = time
         self._logger = logging.getLogger(type(self).__name__)
         self._inputs = deque(maxlen=round(lookback / sampletime))
-        self._sampletime = sampletime * 1000
+        self._sampletime = sampletime
         self._setpoint = setpoint
         self._outputstep = out_step
         self._noiseband = noiseband
@@ -198,7 +241,7 @@ class PIDAutotune(object):
         Returns:
             `true` if tuning is finished, otherwise `false`.
         """
-        now = self._time() * 1000
+        now = self._time()
 
         if (self._state == PIDAutotune.STATE_OFF
                 or self._state == PIDAutotune.STATE_SUCCEEDED
@@ -308,7 +351,7 @@ class PIDAutotune(object):
             # calculate ultimate period in seconds
             period1 = self._peak_timestamps[3] - self._peak_timestamps[1]
             period2 = self._peak_timestamps[4] - self._peak_timestamps[2]
-            self._Pu = 0.5 * (period1 + period2) / 1000.0
+            self._Pu = 0.5 * (period1 + period2)
             return True
         return False
 
